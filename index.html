@@ -170,11 +170,11 @@ b1 -= LR * db1
 v  -= LR * dv
 b2 -= LR * db2</pre>
 
-<h2>五、怎么跑</h2>
+<h2>五、运行方式</h2>
 
-<pre>python train_mlp.py     # 训练，写出 mlp_data.json
-python render_figs.py   # 从 json 生成四张图
-python -m http.server 8000   # 本地预览这个页面</pre>
+<pre>python train_mlp.py     # 训练，输出 mlp_data.json
+python render_figs.py   # 由 json 生成四张图
+python -m http.server 8000   # 可选：本地预览页面</pre>
 
 <p class="note">训练只用 NumPy，画图用 Pillow。每轮的损失、五个时刻的权重和网格概率都存着，
 在 <a href="mlp_data.json">mlp_data.json</a> 里，约 21 万字符。</p>
@@ -195,6 +195,7 @@ python -m http.server 8000   # 本地预览这个页面</pre>
 </main>
 </body>
 </html>
+
 
 
 
