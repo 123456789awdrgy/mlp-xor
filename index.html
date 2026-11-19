@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -32,7 +32,6 @@
   code{background:#f1f3f6; padding:1px 5px; border-radius:3px; font-size:.92em}
   pre{background:#1f2430; color:#e6e9ef; padding:18px 20px; overflow:auto;
       font-size:13.5px; line-height:1.7; border-radius:4px}
-  pre .c{color:#8b93a7}
   .math{font-family:"Cambria Math",Georgia,serif; font-style:italic}
   .eq{background:var(--card); border-left:3px solid var(--accent);
       padding:10px 18px; margin:16px 0; font-family:"Cambria Math",Georgia,serif;
@@ -57,19 +56,19 @@
 <header>
   <div class="kicker">人工智能通识 · 第二篇 第 15 节 · 人工神经元网络</div>
   <h1>MLP 学习参数的实现与可视化</h1>
-  <p class="sub">从零手写一个 2-2-1 的多层感知机，训练它解决 XOR 问题，
-    并把权重、偏置、损失和决策边界的变化画出来。</p>
+  <p class="sub">用 NumPy 写一个 2-2-1 的网络，让它学 XOR，然后把训练过程中参数的变化画出来。</p>
 </header>
 
-<p>这份作业没有调用任何深度学习框架：前向传播、损失、反向传播、参数更新
-全部用 NumPy 写成。训练对象是经典的 XOR 四样本问题——它线性不可分，
-必须靠隐藏层才能解决，正好用来观察“参数是怎么被学出来的”。</p>
+<p>做的是 XOR：四个样本，(0,0) 和 (1,1) 输出 0，(0,1) 和 (1,0) 输出 1。
+这四个点在平面上画出来，一条直线分不开，所以必须有隐藏层。</p>
+
+<p>整份代码没用 PyTorch，前向、损失、反向传播、参数更新都是自己写的。
+好处是每个数怎么来的都能对上，也能把权重一路存下来画图。</p>
 
 <h2>一、网络结构</h2>
 
-<p>输入两个数 <span class="math">x₁, x₂</span>，隐藏层两个 sigmoid 神经元
-<span class="math">h₁, h₂</span>，输出一个 sigmoid 神经元 <span class="math">p</span>，
-表示“判为 1”的概率。整张网络一共 9 个可学习参数。</p>
+<p>输入两个数，中间两个 sigmoid 神经元，输出一个 sigmoid 神经元，
+代表判为 1 的概率。一共 9 个可学习参数。</p>
 
 <div class="eq">
 h = σ(xW + b₁)　　p = σ(hv + b₂)
@@ -77,7 +76,7 @@ h = σ(xW + b₁)　　p = σ(hv + b₂)
 
 <table>
   <tr><th>参数</th><th>形状</th><th>含义</th></tr>
-  <tr><td><code>W</code></td><td>2 × 2</td><td>输入层到隐藏层的连接权重</td></tr>
+  <tr><td><code>W</code></td><td>2 × 2</td><td>输入层到隐藏层的权重</td></tr>
   <tr><td><code>b1</code></td><td>1 × 2</td><td>隐藏层偏置</td></tr>
   <tr><td><code>v</code></td><td>2 × 1</td><td>隐藏层到输出层的权重</td></tr>
   <tr><td><code>b2</code></td><td>1 × 1</td><td>输出层偏置</td></tr>
@@ -85,118 +84,114 @@ h = σ(xW + b₁)　　p = σ(hv + b₂)
 
 <h2>二、损失与反向传播</h2>
 
-<p>目标值 <span class="math">t ∈ {0,1}</span>，用二元交叉熵损失：</p>
+<p>目标值是 0 或 1，用二元交叉熵：</p>
 
 <div class="eq">
 L = − 1/N Σ [ t·log p + (1−t)·log(1−p) ]
 </div>
 
-<p>对输出层求导得误差项，再经 <span class="math">v</span> 传回隐藏层，
-乘上 sigmoid 的导数 <span class="math">h(1−h)</span>，就得到每个参数的梯度：</p>
+<p>先对输出层求误差，再乘 <span class="math">v</span> 传回隐藏层，
+经过 sigmoid 的导数 <span class="math">h(1−h)</span>，得到各参数的梯度：</p>
 
 <div class="eq">
 δ₂ = (p − t) / N　　dv = hᵀδ₂　　db₂ = Σδ₂<br>
 δ₁ = (δ₂vᵀ) ⊙ h(1−h)　　dW = xᵀδ₁　　db₁ = Σδ₁
 </div>
 
-<p>参数按 <code>θ ← θ − lr·∇θ</code> 更新，学习率 0.5，全批量梯度下降，跑 4000 轮。</p>
+<p>更新就是 <code>θ ← θ − lr·∇θ</code>。学习率 0.5，全批量，跑 4000 轮。</p>
 
 <h2>三、训练结果</h2>
 
 <div class="stats">
   <div class="stat"><b>0.0049</b><span>最终损失</span></div>
-  <div class="stat"><b>4 / 4</b><span>XOR 样本全部判对</span></div>
+  <div class="stat"><b>4 / 4</b><span>四个样本判对</span></div>
   <div class="stat"><b>4000</b><span>迭代轮数</span></div>
   <div class="stat"><b>9</b><span>可学习参数</span></div>
 </div>
 
 <h3>损失曲线</h3>
-<p>前 200 轮掉得最快，1000 轮之后基本贴着零线走。
-这是全批量梯度下降的典型形状：先陡后平，不会来回震荡。</p>
+<p>前 200 轮掉得很快，从 0.56 到 0.13。一千轮之后基本不动了，
+在 0.02 附近慢慢磨到 0.005。曲线是光滑的，没有抖，因为每次更新用的是全部四个样本。</p>
 <figure>
   <img src="fig_loss.png" alt="损失曲线">
-  <figcaption>图 1　训练损失随 epoch 变化。红点标出第 50、200、1000、4000 轮的位置。</figcaption>
+  <figcaption>图 1　损失随 epoch 变化。红点是第 50、200、1000、4000 轮。</figcaption>
 </figure>
 
 <h3>决策边界</h3>
-<p>把输入平面离散成 40×40 的网格，逐点送入网络，画出概率热力图。
-第 0 轮时只有一条斜线，几乎没学到东西；第 50 轮开始出现两条相反的斜边；
-到第 1000 轮，中间被压成一条对角线，四个角正确分到红蓝两侧。</p>
+<p>把平面切成 40×40 的格子，每格送进网络算一个概率，画成热力图。</p>
+<p>第 0 轮只有一条斜线穿过，四个点里两个分错；第 50 轮出现两条方向相反的斜带；
+第 200 轮那条带子收窄；到第 1000 轮，中间被压成一条对角线，四个角分到两边。</p>
 <figure>
   <img src="fig_boundary.png" alt="决策边界演化">
-  <figcaption>图 2　四个阶段的决策边界。蓝=判 0，红=判 1，圆点是四个训练样本。</figcaption>
+  <figcaption>图 2　四个阶段的边界。蓝是判 0，红是判 1，圆点是训练样本。</figcaption>
 </figure>
 
 <h3>参数轨迹</h3>
-<p>训练结束时 <code>W = [[6.51, −6.77], [−6.77, 6.51]]</code>，
-<code>v = [[11.81], [11.81]]</code>。绝对值都在变大，说明网络在把决策边界“推陡”，
-让 sigmoid 从模糊的过渡带变成近似阶跃。</p>
-<p>图上只有三条线，因为初始化时两个隐藏单元被设成了完全对称，
-梯度也始终对称：<code>W11 = W22</code>、<code>W12 = W21</code>、<code>v1 = v2</code>。
-这是这套初始化能收敛的原因，也是它的局限——两个隐藏单元在学同一个特征。</p>
+<p>训练完是 <code>W = [[6.51, −6.77], [−6.77, 6.51]]</code>，
+<code>v = [[11.81], [11.81]]</code>，都比初始值大了好几倍。权重变大，
+sigmoid 的过渡带就被压窄，概率往 0 和 1 两端靠。</p>
+<p>图上只有三条线，不是漏画了。初始化时两个隐藏单元设成对称，梯度也一直对称，
+所以 W11 和 W22 重合，W12 和 W21 重合，v1 和 v2 重合。
+这能收敛，代价是两个隐藏单元在学同一个东西。</p>
 <figure>
   <img src="fig_weights.png" alt="参数轨迹">
-  <figcaption>图 3　权重的绝对值持续增长，把概率推向 0 和 1 两端。</figcaption>
+  <figcaption>图 3　参数随训练的变化，虚线那对和实线那对完全重叠。</figcaption>
 </figure>
 
 <h3>隐藏层激活</h3>
-<p>四个样本在隐藏层的激活值差异很大，正是这个差异让输出层能把 XOR 分开：
-每个隐藏单元各管一条斜边，输出的线性组合就拼出了“异或”的形状。</p>
+<p>四个样本在隐藏层的输出差得很远：(0,0) 是两个 0.03，(0,1) 是 0.00 和 0.95，
+(1,0) 是 0.95 和 0.00，(1,1) 是两个 0.02。输出层只要把这两个数加权求和，
+就能把四个点分开。</p>
 <figure>
   <img src="fig_hidden.png" alt="隐藏层激活">
-  <figcaption>图 4　训练结束后四个样本的隐藏层输出与最终概率。</figcaption>
+  <figcaption>图 4　训练结束后四个样本的隐藏层输出和最终概率。</figcaption>
 </figure>
 
 <h2>四、关键代码</h2>
 
-<p>前向传播和损失：</p>
-<pre><span class="c"># 前向：隐藏层与输出层都用 sigmoid</span>
-h = sigmoid(X @ W + b1)
+<p>前向和损失：</p>
+<pre>h = sigmoid(X @ W + b1)
 p = sigmoid(h @ v + b2)
 loss = -np.mean(T * np.log(p + 1e-12) + (1 - T) * np.log(1 - p + 1e-12))</pre>
 
-<p>手写反向传播：</p>
-<pre><span class="c"># 输出层误差 → 梯度</span>
-dz2 = (p - T) / len(X)
+<p>反向传播：</p>
+<pre>dz2 = (p - T) / len(X)          # 输出层误差
 dv  = h.T @ dz2
 db2 = dz2.sum(axis=0, keepdims=True)
 
-<span class="c"># 误差回传到隐藏层，乘 sigmoid 导数</span>
-dh  = dz2 @ v.T
-dz1 = dh * h * (1 - h)
+dh  = dz2 @ v.T                 # 传回隐藏层
+dz1 = dh * h * (1 - h)          # 乘 sigmoid 的导数
 dW  = X.T @ dz1
 db1 = dz1.sum(axis=0, keepdims=True)
 
-<span class="c"># 梯度下降</span>
-W  -= LR * dW
+W  -= LR * dW                   # 更新
 b1 -= LR * db1
 v  -= LR * dv
 b2 -= LR * db2</pre>
 
-<h2>五、如何复现</h2>
+<h2>五、怎么跑</h2>
 
-<pre>python train_mlp.py     <span class="c"># 训练，输出 mlp_data.json</span>
-python render_figs.py   <span class="c"># 由 JSON 生成四张图</span>
-python -m http.server 8000   <span class="c"># 本地预览本页</span></pre>
+<pre>python train_mlp.py     # 训练，写出 mlp_data.json
+python render_figs.py   # 从 json 生成四张图
+python -m http.server 8000   # 本地预览这个页面</pre>
 
-<p class="note">训练脚本只用 NumPy；作图用 Pillow，没有 matplotlib 依赖。
-原始训练数据（每轮损失、五个时刻的权重与网格概率）在
-<a href="mlp_data.json">mlp_data.json</a> 里，可另行分析。</p>
+<p class="note">训练只用 NumPy，画图用 Pillow。每轮的损失、五个时刻的权重和网格概率都存着，
+在 <a href="mlp_data.json">mlp_data.json</a> 里，约 21 万字符。</p>
 
-<h2>六、观察到的问题</h2>
+<h2>六、两个没解决的问题</h2>
 
-<p>一是上面说的对称性：两个隐藏单元始终学同一个东西，相当于只有 1 个有效隐藏单元。
-换成随机初始化，两条线会分开，决策边界的形状也会略有不同。</p>
+<p>一是对称初始化。两个隐藏单元从头到尾一样，等于只有 1 个有效单元。
+换成随机初始化，两条参数线会分开，边界形状也会不同。这次没做对比。</p>
 
-<p>二是输出层权重涨到 11 以上之后，sigmoid 已经接近饱和，梯度变得很小，
-训练后期几乎不再变化。想继续压低损失，得换更平缓的激活函数或者加正则，
-而不是一味增加 epoch。</p>
+<p>二是输出层权重涨到 11 以后，sigmoid 接近饱和，梯度很小，
+后面三千轮损失只从 0.02 掉到 0.005。想再低，得换激活函数或者加正则，
+单纯加 epoch 没用。</p>
 
 <footer>
-  人工智能通识 · 第二次作业 · 使用 NumPy 手写实现，未调用深度学习框架。<br>
-  数据与代码见同目录下的 <code>train_mlp.py</code>、<code>render_figs.py</code>、<code>mlp_data.json</code>。
+  人工智能通识 · 第二次作业。代码在同目录：<code>train_mlp.py</code>、<code>render_figs.py</code>、<code>mlp_data.json</code>。
 </footer>
 
 </main>
 </body>
 </html>
+
