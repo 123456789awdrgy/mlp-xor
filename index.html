@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MLP 学习参数的实现与可视化</title>
+<style>
+  :root{
+    --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb;
+    --accent:#2f5fa8; --bg:#fbfbfa; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Noto Serif SC","Source Han Serif SC","Songti SC",Georgia,serif;
+    line-height:1.85; font-size:17px;
+  }
+  main{max-width:880px; margin:0 auto; padding:56px 24px 96px}
+  header{border-bottom:2px solid var(--ink); padding-bottom:28px; margin-bottom:40px}
+  .kicker{font-family:ui-sans-serif,system-ui,"Microsoft YaHei",sans-serif;
+    font-size:13px; letter-spacing:.18em; color:var(--muted); text-transform:uppercase}
+  h1{font-size:34px; line-height:1.3; margin:14px 0 10px; letter-spacing:.5px}
+  .sub{color:var(--muted); font-size:15px}
+  h2{font-size:23px; margin:56px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line)}
+  h3{font-size:18px; margin:30px 0 8px}
+  p{margin:14px 0}
+  .note{font-size:14.5px; color:var(--muted)}
+  figure{margin:26px 0 8px; background:var(--card); border:1px solid var(--line); padding:14px}
+  figure img{width:100%; display:block}
+  figcaption{font-size:13.5px; color:var(--muted); margin-top:10px}
+  code,pre{font-family:"Cascadia Mono",Consolas,"Courier New",monospace}
+  code{background:#f1f3f6; padding:1px 5px; border-radius:3px; font-size:.92em}
+  pre{background:#1f2430; color:#e6e9ef; padding:18px 20px; overflow:auto;
+      font-size:13.5px; line-height:1.7; border-radius:4px}
+  pre .c{color:#8b93a7}
+  .math{font-family:"Cambria Math",Georgia,serif; font-style:italic}
+  .eq{background:var(--card); border-left:3px solid var(--accent);
+      padding:10px 18px; margin:16px 0; font-family:"Cambria Math",Georgia,serif;
+      font-size:16.5px; overflow-x:auto}
+  .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+         gap:14px; margin:22px 0}
+  .stat{background:var(--card); border:1px solid var(--line); padding:14px 16px}
+  .stat b{display:block; font-size:24px; font-family:ui-sans-serif,system-ui,sans-serif}
+  .stat span{font-size:13px; color:var(--muted)}
+  table{border-collapse:collapse; width:100%; margin:18px 0; font-size:15px;
+        font-family:ui-sans-serif,system-ui,"Microsoft YaHei",sans-serif}
+  th,td{border-bottom:1px solid var(--line); padding:9px 10px; text-align:left}
+  th{color:var(--muted); font-weight:600; font-size:13.5px}
+  footer{margin-top:72px; padding-top:20px; border-top:1px solid var(--line);
+         font-size:13.5px; color:var(--muted)}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <div class="kicker">人工智能通识 · 第二篇 第 15 节 · 人工神经元网络</div>
+  <h1>MLP 学习参数的实现与可视化</h1>
+  <p class="sub">从零手写一个 2-2-1 的多层感知机，训练它解决 XOR 问题，
+    并把权重、偏置、损失和决策边界的变化画出来。</p>
+</header>
+
+<p>这份作业没有调用任何深度学习框架：前向传播、损失、反向传播、参数更新
+全部用 NumPy 写成。训练对象是经典的 XOR 四样本问题——它线性不可分，
+必须靠隐藏层才能解决，正好用来观察“参数是怎么被学出来的”。</p>
+
+<h2>一、网络结构</h2>
+
+<p>输入两个数 <span class="math">x₁, x₂</span>，隐藏层两个 sigmoid 神经元
+<span class="math">h₁, h₂</span>，输出一个 sigmoid 神经元 <span class="math">p</span>，
+表示“判为 1”的概率。整张网络一共 9 个可学习参数。</p>
+
+<div class="eq">
+h = σ(xW + b₁)　　p = σ(hv + b₂)
+</div>
+
+<table>
+  <tr><th>参数</th><th>形状</th><th>含义</th></tr>
+  <tr><td><code>W</code></td><td>2 × 2</td><td>输入层到隐藏层的连接权重</td></tr>
+  <tr><td><code>b1</code></td><td>1 × 2</td><td>隐藏层偏置</td></tr>
+  <tr><td><code>v</code></td><td>2 × 1</td><td>隐藏层到输出层的权重</td></tr>
+  <tr><td><code>b2</code></td><td>1 × 1</td><td>输出层偏置</td></tr>
+</table>
+
+<h2>二、损失与反向传播</h2>
+
+<p>目标值 <span class="math">t ∈ {0,1}</span>，用二元交叉熵损失：</p>
+
+<div class="eq">
+L = − 1/N Σ [ t·log p + (1−t)·log(1−p) ]
+</div>
+
+<p>对输出层求导得误差项，再经 <span class="math">v</span> 传回隐藏层，
+乘上 sigmoid 的导数 <span class="math">h(1−h)</span>，就得到每个参数的梯度：</p>
+
+<div class="eq">
+δ₂ = (p − t) / N　　dv = hᵀδ₂　　db₂ = Σδ₂<br>
+δ₁ = (δ₂vᵀ) ⊙ h(1−h)　　dW = xᵀδ₁　　db₁ = Σδ₁
+</div>
+
+<p>参数按 <code>θ ← θ − lr·∇θ</code> 更新，学习率 0.5，全批量梯度下降，跑 4000 轮。</p>
+
+<h2>三、训练结果</h2>
+
+<div class="stats">
+  <div class="stat"><b>0.0049</b><span>最终损失</span></div>
+  <div class="stat"><b>4 / 4</b><span>XOR 样本全部判对</span></div>
+  <div class="stat"><b>4000</b><span>迭代轮数</span></div>
+  <div class="stat"><b>9</b><span>可学习参数</span></div>
+</div>
+
+<h3>损失曲线</h3>
+<p>前 200 轮掉得最快，1000 轮之后基本贴着零线走。
+这是全批量梯度下降的典型形状：先陡后平，不会来回震荡。</p>
+<figure>
+  <img src="fig_loss.png" alt="损失曲线">
+  <figcaption>图 1　训练损失随 epoch 变化。红点标出第 50、200、1000、4000 轮的位置。</figcaption>
+</figure>
+
+<h3>决策边界</h3>
+<p>把输入平面离散成 40×40 的网格，逐点送入网络，画出概率热力图。
+第 0 轮时只有一条斜线，几乎没学到东西；第 50 轮开始出现两条相反的斜边；
+到第 1000 轮，中间被压成一条对角线，四个角正确分到红蓝两侧。</p>
+<figure>
+  <img src="fig_boundary.png" alt="决策边界演化">
+  <figcaption>图 2　四个阶段的决策边界。蓝=判 0，红=判 1，圆点是四个训练样本。</figcaption>
+</figure>
+
+<h3>参数轨迹</h3>
+<p>训练结束时 <code>W = [[6.51, −6.77], [−6.77, 6.51]]</code>，
+<code>v = [[11.81], [11.81]]</code>。绝对值都在变大，说明网络在把决策边界“推陡”，
+让 sigmoid 从模糊的过渡带变成近似阶跃。</p>
+<p>图上只有三条线，因为初始化时两个隐藏单元被设成了完全对称，
+梯度也始终对称：<code>W11 = W22</code>、<code>W12 = W21</code>、<code>v1 = v2</code>。
+这是这套初始化能收敛的原因，也是它的局限——两个隐藏单元在学同一个特征。</p>
+<figure>
+  <img src="fig_weights.png" alt="参数轨迹">
+  <figcaption>图 3　权重的绝对值持续增长，把概率推向 0 和 1 两端。</figcaption>
+</figure>
+
+<h3>隐藏层激活</h3>
+<p>四个样本在隐藏层的激活值差异很大，正是这个差异让输出层能把 XOR 分开：
+每个隐藏单元各管一条斜边，输出的线性组合就拼出了“异或”的形状。</p>
+<figure>
+  <img src="fig_hidden.png" alt="隐藏层激活">
+  <figcaption>图 4　训练结束后四个样本的隐藏层输出与最终概率。</figcaption>
+</figure>
+
+<h2>四、关键代码</h2>
+
+<p>前向传播和损失：</p>
+<pre><span class="c"># 前向：隐藏层与输出层都用 sigmoid</span>
+h = sigmoid(X @ W + b1)
+p = sigmoid(h @ v + b2)
+loss = -np.mean(T * np.log(p + 1e-12) + (1 - T) * np.log(1 - p + 1e-12))</pre>
+
+<p>手写反向传播：</p>
+<pre><span class="c"># 输出层误差 → 梯度</span>
+dz2 = (p - T) / len(X)
+dv  = h.T @ dz2
+db2 = dz2.sum(axis=0, keepdims=True)
+
+<span class="c"># 误差回传到隐藏层，乘 sigmoid 导数</span>
+dh  = dz2 @ v.T
+dz1 = dh * h * (1 - h)
+dW  = X.T @ dz1
+db1 = dz1.sum(axis=0, keepdims=True)
+
+<span class="c"># 梯度下降</span>
+W  -= LR * dW
+b1 -= LR * db1
+v  -= LR * dv
+b2 -= LR * db2</pre>
+
+<h2>五、如何复现</h2>
+
+<pre>python train_mlp.py     <span class="c"># 训练，输出 mlp_data.json</span>
+python render_figs.py   <span class="c"># 由 JSON 生成四张图</span>
+python -m http.server 8000   <span class="c"># 本地预览本页</span></pre>
+
+<p class="note">训练脚本只用 NumPy；作图用 Pillow，没有 matplotlib 依赖。
+原始训练数据（每轮损失、五个时刻的权重与网格概率）在
+<a href="mlp_data.json">mlp_data.json</a> 里，可另行分析。</p>
+
+<h2>六、观察到的问题</h2>
+
+<p>一是上面说的对称性：两个隐藏单元始终学同一个东西，相当于只有 1 个有效隐藏单元。
+换成随机初始化，两条线会分开，决策边界的形状也会略有不同。</p>
+
+<p>二是输出层权重涨到 11 以上之后，sigmoid 已经接近饱和，梯度变得很小，
+训练后期几乎不再变化。想继续压低损失，得换更平缓的激活函数或者加正则，
+而不是一味增加 epoch。</p>
+
+<footer>
+  人工智能通识 · 第二次作业 · 使用 NumPy 手写实现，未调用深度学习框架。<br>
+  数据与代码见同目录下的 <code>train_mlp.py</code>、<code>render_figs.py</code>、<code>mlp_data.json</code>。
+</footer>
+
+</main>
+</body>
+</html>
